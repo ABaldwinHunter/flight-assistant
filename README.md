@@ -37,7 +37,7 @@ uv run flight-assistant --trace
 
 ## Try it
 
-All flight inventory, prices, baggage rules, and availability are **fictional**, in USD. Use the fixed demo departure date **2026-11-16**, not an arbitrary current date. Supported demo routes include JFK → LHR, JFK → CDG, and SFO → JFK.
+All flight inventory, prices, baggage rules, and availability are **fictional**, in USD. Any valid departure date works for any distinct pair of supported airports: **JFK, LHR, CDG, SFO, ATL, LAX, ORD, BOS, MIA**. Each route/date has three options: two nonstop flights and one cheaper connecting flight. The displayed date/routes are examples, not restrictions; restrictive filters can still return no matches.
 
 1. **Clarification:** “Find me a flight to London.” Supply JFK and 2026-11-16 when asked.
 2. **Search:** “Search JFK to LHR on 2026-11-16.”
@@ -48,13 +48,15 @@ All flight inventory, prices, baggage rules, and availability are **fictional**,
 
 Enable **tool trace** to inspect model-requested tool names, arguments, returned data/errors, and timings. This is observable execution, not private model reasoning.
 
+**New conversation** immediately creates and selects a saved empty chat; previous chats remain in the sidebar. After an assistant reply, choose **Helpful** or **Not helpful** to rate that conversation. Select the same choice again to clear it. Ratings survive refreshes and restarts; this local app has one shared rating per conversation, not separate user accounts.
+
 ## How it works
 
-The model either asks a clarifying question, answers from existing evidence, or requests an allowlisted function. Python validates the arguments, searches deterministic fixtures or retrieves flight details, then sends structured results back to the model. The explicit loop is bounded; empty results and tool failures are distinct. SQLite retains tool evidence so follow-ups do not depend on the server process staying alive.
+The model either asks a clarifying question, answers from existing evidence, or requests an allowlisted function. Python validates the arguments, generates simulated flights or retrieves their details, then sends structured results back to the model. SHA-256 of the route and date makes schedules and prices deterministic across process restarts. Flight IDs encode the route, date, and option so detail lookups can regenerate the same flight without a flight database. SQLite stores conversations, ratings, messages, and tool evidence.
 
-Read the code in this order: `tools.py` (schemas and fixtures), `service.py` (OpenAI Responses API loop), `store.py` (SQLite and replayable turns), then `app.py` / `static/app.js` (HTTP and UI). The CLI is `cli.py`.
+Read the code in this order: `tools.py` (schemas and deterministic generator), `service.py` (OpenAI Responses API loop), `store.py` (SQLite and replayable turns), then `app.py` / `static/app.js` (HTTP and UI). The CLI is `cli.py`.
 
-Per turn: at most **5 model requests**, **8 tool executions**, and **1,800 output tokens per request**, with a **20-second timeout per request** and no SDK retries. Provider context keeps at most **12 whole turns** within **48,000 serialized characters**, including balanced tool evidence from failed turns; older chat remains visible in SQLite but is not necessarily sent to the model. Missing context requires clarification, not guessing. Input is capped at 4,000 characters.
+Per turn: at most **5 model invocations**, **8 tool executions**, and **1,800 output tokens per invocation**. The OpenAI client uses **`max_retries=2`** for retryable failures: up to three attempts per invocation, with a **20-second SDK timeout per attempt**. Retries and backoff can increase overall latency. Provider context keeps at most **12 whole turns** within **48,000 serialized characters**, including balanced tool evidence from failed turns; older chat remains visible in SQLite but is not necessarily sent to the model. Missing context requires clarification, not guessing. Input is capped at 4,000 characters.
 
 Settings in `.env`:
 
@@ -71,12 +73,13 @@ Settings in `.env`:
 uv run pytest
 ```
 
-Deterministic tests cover validation, persistence, safe provider errors, and execution/context limits without paid API calls. Live smoke checks with `gpt-4.1-mini` passed in the browser and CLI: clarification, search, price/nonstop follow-ups, baggage lookup, empty results, an explicit tool outage, and grounded history after a server restart. To repeat, configure your key and perform the demo above with tool trace enabled. Scripted-provider tests do **not** prove real-model behavior; model wording and decisions can vary between runs.
+Deterministic tests cover generated routes/dates, stable cross-process results, filtering, retry recovery/exhaustion, execution/context limits, rating persistence, and migration without losing history. Browser checks cover immediate chat creation, rating changes/clearing, failures, navigation during a save, and desktop/mobile layouts without paid model calls. Earlier live checks with `gpt-4.1-mini` exercised clarification, search, follow-ups, empty results, tool outages, and history after restart. To repeat live checks, configure your key and perform the demo above. Scripted-provider tests do **not** prove real-model behavior; wording and decisions can vary.
 
 ## Scope and tradeoffs
 
 - Local single-user demo. No authentication: bind to loopback, not a public interface. Conversations and tool results are stored as plaintext on disk; user messages and retained conversation context are sent to OpenAI. Do not enter sensitive passenger information.
 - Simulated flight data is intentional: deterministic searches make the tool-calling behavior easy to inspect. No external flight API account is required.
+- Existing chats keep their historical results. If a chat contains old fixed-catalog flight IDs, run a fresh search to get IDs for the generated catalogue.
 - A real flight provider is an optional extension, **not implemented**. [Amadeus](https://developers.amadeus.com/pricing) advertises monthly test quotas; [Duffel test mode](https://duffel.com/docs/api/overview/test-mode/duffel-airways) provides a sandbox, including fictional Duffel Airways with unrealistic schedules/prices. Check current access terms and production pricing before integrating. Sandbox results must remain labeled as such.
 - A real integration should return provider-supplied offer URLs when available. It must not manufacture a booking link or imply that a search result is a reservation.
 - `AGENTS.md` records the coding and verification rules for future changes.
