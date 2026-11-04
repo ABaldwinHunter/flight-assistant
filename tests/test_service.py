@@ -15,7 +15,7 @@ def new_chat(settings, provider):
 
 
 def test_search_trace_and_grounded_followup_survive_restart(settings, search_args):
-    provider = ScriptedProvider(calls(("search_flights", search_args, "search-1")), answer("Simulated SIM-BRG-201 costs USD 430."))
+    provider = ScriptedProvider(calls(("search_flights", search_args, "search-1")), answer("Here are the simulated flight options."))
     service, chat_id = new_chat(settings, provider)
     result = service.send_message(chat_id, "JFK to LHR on November 16, 2026")
     assistant = result["assistant_message"]
@@ -24,14 +24,14 @@ def test_search_trace_and_grounded_followup_survive_restart(settings, search_arg
     event = assistant["tool_events"][0]
     assert event["status"] == "ok" and event["duration_ms"] >= 0
     assert event["arguments"] == search_args
-    assert event["result"]["flights"][0]["flight_id"] == "SIM-BRG-201"
+    cheapest = event["result"]["flights"][0]
 
-    followup = ScriptedProvider(calls(("get_flight_details", {"flight_id": "SIM-BRG-201"}, "detail-1")), answer("Simulated SIM-BRG-201 has no checked bag included; first bag USD 70 each way."))
+    followup = ScriptedProvider(calls(("get_flight_details", {"flight_id": cheapest["flight_id"]}, "detail-1")), answer("Here are the simulated baggage details."))
     restarted = ChatService(settings, provider=followup)
     result = restarted.send_message(chat_id, "Does the cheaper one include a checked bag?")
     assert result["assistant_message"]["status"] == "complete"
     prior_outputs = [item for item in followup.calls[0]["input"] if item.get("type") == "function_call_output"]
-    assert json.loads(prior_outputs[0]["output"])["flights"][0]["price"] == 430
+    assert json.loads(prior_outputs[0]["output"])["flights"][0] == cheapest
     restored = restarted.store.get_conversation(chat_id)
     assert len(restored["messages"]) == 4
     assert restored["messages"][1] == assistant
@@ -87,7 +87,7 @@ def test_upstream_error_is_safe_and_keeps_completed_tool_trace(settings, search_
     resumed_input = next_provider.calls[0]["input"]
     assert resumed_input[-1] == {"role": "user", "content": "Try again"}
     recovered_outputs = [item for item in resumed_input if item.get("type") == "function_call_output"]
-    assert json.loads(recovered_outputs[0]["output"])["flights"][0]["flight_id"] == "SIM-BRG-201"
+    assert json.loads(recovered_outputs[0]["output"]) == result["assistant_message"]["tool_events"][0]["result"]
 
 
 def test_model_request_limit_preserves_events_without_unmatched_context(settings, search_args):
@@ -132,7 +132,7 @@ def test_context_prunes_whole_old_turns_and_bounds_every_request(settings):
     service, chat_id = new_chat(settings, ScriptedProvider(answer("Which date?")))
     for index in range(15):
         token, _ = service.store.begin_turn(chat_id, f"old-{index}")
-        transcript = [{"role": "user", "content": f"old-{index}"}, {"type": "function_call", "call_id": f"old-call-{index}", "name": "get_flight_details", "arguments": '{"flight_id":"SIM-ATL-101"}'}, {"type": "function_call_output", "call_id": f"old-call-{index}", "output": json.dumps({"padding": "x" * 6000})}, {"role": "assistant", "content": "Simulated details."}]
+        transcript = [{"role": "user", "content": f"old-{index}"}, {"type": "function_call", "call_id": f"old-call-{index}", "name": "get_flight_details", "arguments": '{"flight_id":"SIM-JFK-LHR-20261116-1"}'}, {"type": "function_call_output", "call_id": f"old-call-{index}", "output": json.dumps({"padding": "x" * 6000})}, {"role": "assistant", "content": "Simulated details."}]
         service.store.finish_turn(chat_id, token, "Simulated details.", "complete", [], transcript)
     service.send_message(chat_id, "What about tomorrow?")
     request = service._provider.calls[0]
@@ -189,3 +189,34 @@ def test_network_failure_is_safe_and_the_conversation_can_continue(settings):
     recovered = service.send_message(chat_id, "November 16, 2026")
     assert recovered["assistant_message"]["status"] == "complete"
     assert len(service.store.get_conversation(chat_id)["messages"]) == 4
+
+
+@pytest.mark.parametrize("statuses", [(503, 429, 200), (503, 503, 503)])
+def test_real_sdk_recovers_or_stops_after_two_retries(settings, monkeypatch, statuses):
+    import httpx
+
+    attempts = []
+
+    def handle_request(_transport, request):
+        status = statuses[len(attempts)]
+        attempts.append(status)
+        if status != 200:
+            return httpx.Response(status, request=request, headers={"retry-after": "0"}, json={"error": {"message": "Temporary test outage", "type": "server_error"}})
+        return httpx.Response(200, request=request, json={
+            "id": "resp_retry_test", "object": "response", "created_at": 0,
+            "status": "completed", "model": settings.model,
+            "output": [{"id": "msg_retry_test", "type": "message", "role": "assistant", "status": "completed", "content": [{"type": "output_text", "text": "Which departure date?", "annotations": []}]}],
+        })
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handle_request)
+    monkeypatch.setattr("openai._base_client.time.sleep", lambda _seconds: None)
+    service = ChatService(settings)
+    chat_id = service.store.create_conversation()["id"]
+    try:
+        result = service.send_message(chat_id, "JFK to LHR")
+    finally:
+        service._provider.close()
+    assert attempts == list(statuses)
+    expected_status = "complete" if statuses[-1] == 200 else "error"
+    assert result["assistant_message"]["status"] == expected_status
+    assert service.store.get_conversation(chat_id)["messages"][-1]["status"] == expected_status

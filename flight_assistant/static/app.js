@@ -26,6 +26,11 @@ const elements = {
   sendError: document.getElementById("send-error"),
   countInput: document.getElementById("input-count"),
   trace: document.getElementById("trace-toggle"),
+  rating: document.getElementById("conversation-rating"),
+  ratingUp: document.getElementById("rating-up"),
+  ratingDown: document.getElementById("rating-down"),
+  ratingStatus: document.getElementById("rating-status"),
+  ratingError: document.getElementById("rating-error"),
   model: document.getElementById("model-label"),
   live: document.getElementById("live-status"),
   examples: [...document.querySelectorAll("[data-example]")],
@@ -59,6 +64,8 @@ const state = {
   loading: new Set(),
   loadErrors: new Map(),
   sendErrors: new Map(),
+  ratingPending: new Set(),
+  ratingErrors: new Map(),
   showTrace: storedValue(STORAGE.trace) === "true",
 };
 
@@ -160,6 +167,57 @@ function renderControls() {
   const conversation = state.conversations.find((item) => item.id === id);
   elements.title.textContent = conversation?.title || (id ? "Conversation" : "Flight assistant");
   elements.title.title = elements.title.textContent;
+  renderRating();
+}
+
+function renderRating() {
+  const id = state.selectedId;
+  const conversation = state.conversations.find((item) => item.id === id);
+  const rating = conversation?.rating ?? null;
+  const saving = state.ratingPending.has(id);
+  const hasReply = (state.messages.get(id) || []).some((message) => message.role === "assistant");
+  const disabled = !conversation || !hasReply || saving || state.creating || state.loading.has(id) || state.loadErrors.has(id) || state.pending.has(id);
+  elements.rating.hidden = !id;
+  elements.ratingUp.disabled = disabled;
+  elements.ratingDown.disabled = disabled;
+  elements.ratingUp.setAttribute("aria-pressed", String(rating === "up"));
+  elements.ratingDown.setAttribute("aria-pressed", String(rating === "down"));
+  elements.ratingStatus.textContent = saving ? "Saving rating…"
+    : !hasReply ? "Send a message before rating."
+    : rating ? `Rated ${rating === "up" ? "helpful" : "not helpful"}. Select it again to clear.`
+    : "Optional feedback, saved with this conversation.";
+  const error = state.ratingErrors.get(id);
+  elements.ratingError.hidden = !error;
+  elements.ratingError.textContent = error || "";
+}
+
+async function saveRating(value) {
+  const id = state.selectedId;
+  const conversation = state.conversations.find((item) => item.id === id);
+  if (!conversation || elements.ratingUp.disabled) return;
+  const rating = conversation.rating === value ? null : value;
+  state.ratingPending.add(id);
+  state.ratingErrors.delete(id);
+  renderControls();
+  try {
+    const result = await api(`/api/conversations/${encodeURIComponent(id)}/rating`, {
+      method: "PUT",
+      body: JSON.stringify({ rating }),
+    });
+    const current = state.conversations.find((item) => item.id === id);
+    if (current) current.rating = result.rating;
+    // Ignore sidebar responses fetched before this rating was saved.
+    state.listRequest += 1;
+    state.historyLoading = false;
+    announce(result.rating === null ? "Conversation rating cleared." : "Conversation rating saved.");
+  } catch (error) {
+    state.ratingErrors.set(id, error.message);
+    announce("Could not save the conversation rating. Your previous rating is unchanged.");
+  } finally {
+    state.ratingPending.delete(id);
+    renderSidebar();
+    if (state.selectedId === id) renderControls();
+  }
 }
 
 function renderConfig() {
@@ -321,7 +379,8 @@ async function loadConversation(id) {
     const conversation = await api(`/api/conversations/${encodeURIComponent(id)}`);
     state.messages.set(id, conversation.messages);
     const existing = state.conversations.find((item) => item.id === id);
-    if (existing) existing.title = conversation.title;
+    if (existing) Object.assign(existing, { title: conversation.title, rating: conversation.rating });
+    else state.conversations.unshift(conversation);
   } catch (error) {
     if (error.status === 404) {
       state.conversations = state.conversations.filter((item) => item.id !== id);
@@ -337,15 +396,38 @@ async function loadConversation(id) {
   }
 }
 
-function newConversation() {
-  if (state.creating) return;
-  state.selectedId = null;
-  saveValue(STORAGE.conversation, null);
+async function createConversation(draft = "") {
+  state.creating = true;
   showGlobalError(null);
   renderAll();
-  elements.scroll.scrollTop = 0;
-  elements.input.focus();
-  announce("New conversation. Your other conversations are saved.");
+  try {
+    const conversation = await api("/api/conversations", { method: "POST", body: "{}" });
+    state.messages.set(conversation.id, conversation.messages);
+    state.conversations = [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)];
+    // Discard older sidebar responses that predate this newly created chat.
+    state.listRequest += 1;
+    state.historyLoading = false;
+    state.selectedId = conversation.id;
+    state.drafts.set(conversation.id, draft);
+    state.drafts.delete(NEW_CHAT);
+    saveValue(STORAGE.conversation, conversation.id);
+    return conversation.id;
+  } finally {
+    state.creating = false;
+    renderAll(true);
+  }
+}
+
+async function newConversation() {
+  if (state.creating) return;
+  try {
+    await createConversation();
+    elements.input.focus();
+    announce("New conversation saved. Your other conversations are unchanged.");
+  } catch (error) {
+    showGlobalError(error.message);
+    announce("Could not create a conversation. Your current conversation and draft are unchanged.");
+  }
 }
 
 async function sendMessage(event) {
@@ -358,26 +440,14 @@ async function sendMessage(event) {
   if (!content || originalDraft.length > 4000) return;
   state.sendErrors.delete(draftKey());
   if (!id) {
-    state.creating = true;
-    renderAll();
     try {
-      const conversation = await api("/api/conversations", { method: "POST", body: "{}" });
-      id = conversation.id;
-      state.messages.set(id, conversation.messages);
-      state.conversations = [conversation, ...state.conversations.filter((item) => item.id !== id)];
-      // Discard older sidebar responses that predate this newly created chat.
-      state.listRequest += 1;
-      state.historyLoading = false;
-      state.selectedId = id;
-      state.drafts.delete(NEW_CHAT);
-      saveValue(STORAGE.conversation, id);
+      id = await createConversation(originalDraft);
     } catch (error) {
       state.sendErrors.set(NEW_CHAT, error.message);
       announce("Could not start the conversation. Your draft has been kept.");
       return;
     } finally {
-      state.creating = false;
-      renderAll();
+      renderControls();
     }
   }
   const previousMessages = state.messages.get(id) || [];
@@ -415,6 +485,8 @@ async function sendMessage(event) {
 }
 
 elements.newChat.addEventListener("click", newConversation);
+elements.ratingUp.addEventListener("click", () => saveRating("up"));
+elements.ratingDown.addEventListener("click", () => saveRating("down"));
 elements.form.addEventListener("submit", sendMessage);
 elements.input.addEventListener("input", () => {
   state.drafts.set(draftKey(), elements.input.value);

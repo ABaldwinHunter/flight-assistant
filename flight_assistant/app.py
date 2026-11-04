@@ -1,6 +1,7 @@
 """Local-only HTTP API and static web interface (no authentication)."""
 from pathlib import Path
 import sqlite3
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -22,6 +23,11 @@ class MessageBody(BaseModel):
     content: str = Field(strict=True, min_length=1, max_length=MAX_USER_CHARS)
 
 
+class RatingBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    rating: Literal["up", "down"] | None
+
+
 def create_app(settings: Settings | None = None, *, provider=None) -> FastAPI:
     service = ChatService(settings or Settings.from_env(), provider=provider)
     application = FastAPI(title="Simulated Flight Assistant", version="1.0.0")
@@ -29,7 +35,7 @@ def create_app(settings: Settings | None = None, *, provider=None) -> FastAPI:
 
     @application.exception_handler(RequestValidationError)
     async def validation_error(_request, _error):
-        return JSONResponse(status_code=422, content={"detail": "Invalid request. Send a JSON object with only the expected fields; messages require nonblank text of at most 4000 characters."})
+        return JSONResponse(status_code=422, content={"detail": "Invalid request. Use only the expected fields. Messages require nonblank text of at most 4000 characters; ratings must be 'up', 'down', or null."})
 
     @application.exception_handler(ConversationNotFound)
     async def missing_conversation(_request, _error):
@@ -62,6 +68,10 @@ def create_app(settings: Settings | None = None, *, provider=None) -> FastAPI:
     @application.get("/api/conversations/{conversation_id}")
     def conversation(conversation_id: str):
         return service.store.get_conversation(conversation_id)
+
+    @application.put("/api/conversations/{conversation_id}/rating")
+    def rate_conversation(conversation_id: str, body: RatingBody):
+        return service.store.set_rating(conversation_id, body.rating)
 
     @application.post("/api/conversations/{conversation_id}/messages")
     def message(conversation_id: str, body: MessageBody):

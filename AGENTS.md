@@ -1,5 +1,13 @@
 # Flight assistant engineering rules
 
+## Working with the user
+
+- Before each implementation or verification step, explain the specific action and why it is needed, then wait for explicit user approval.
+- Approval covers only that step. Afterwards, report what changed or what the check showed, and propose the next step without starting it.
+- Do not batch additional changes, run checks, or delegate work beyond the approved step. Pause immediately when the user asks to stop or check in.
+
+## Engineering
+
 - Keep this an explainable tool-calling demo: Python/FastAPI, SQLite, vanilla browser client, optional CLI. No agent framework, RAG, booking, or frontend build stack.
 - Use a real LLM API. Never silently substitute a fake model. Keep API keys server-side, out of logs, responses, traces, and version control.
 - Label all flight inventory, prices, and availability **simulated**. Do not describe a sandbox provider as live inventory.

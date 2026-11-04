@@ -29,7 +29,7 @@ def test_configuration_and_missing_key_do_not_prevent_startup(settings):
 
 
 def test_successful_http_turn_has_durable_tool_events_and_title(settings, search_args):
-    provider = ScriptedProvider(calls(("search_flights", search_args, "search-1")), answer("Simulated SIM-ATL-101 costs USD 545."))
+    provider = ScriptedProvider(calls(("search_flights", search_args, "search-1")), answer("Here are the simulated flight options."))
     with TestClient(create_app(settings, provider=provider)) as client:
         created = client.post("/api/conversations", json={})
         assert created.status_code == 201

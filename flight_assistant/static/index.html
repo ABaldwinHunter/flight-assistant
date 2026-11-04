@@ -58,6 +58,13 @@
       </div>
 
       <section class="composer-area" aria-label="Write a message">
+        <div class="conversation-rating" id="conversation-rating" role="group" aria-label="Rate this conversation" hidden>
+          <span class="rating-label">Was this conversation helpful?</span>
+          <button class="rating-button" id="rating-up" type="button" aria-pressed="false"><span aria-hidden="true">👍</span> Helpful</button>
+          <button class="rating-button" id="rating-down" type="button" aria-pressed="false"><span aria-hidden="true">👎</span> Not helpful</button>
+          <p class="rating-status" id="rating-status" role="status"></p>
+          <p class="rating-error" id="rating-error" role="alert" hidden></p>
+        </div>
         <div class="composer-toolbar"><label class="trace-toggle"><input id="trace-toggle" type="checkbox"><span>Show tool activity</span></label><span class="model-label" id="model-label">Connecting to server…</span></div>
         <p class="send-error" id="send-error" role="alert" hidden></p>
         <form class="composer" id="message-form">

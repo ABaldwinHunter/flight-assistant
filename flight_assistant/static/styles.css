@@ -112,6 +112,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .trace-toggle { display: inline-flex; align-items: center; gap: 7px; color: #647669; font-size: 10px; cursor: pointer; }
 .trace-toggle input { width: 12px; height: 12px; margin: 0; accent-color: var(--accent); }
 .model-label { color: #86917e; font-size: 9px; }
+.conversation-rating { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; max-width: 790px; margin: 0 auto 12px; }
+.rating-label { margin-right: 4px; color: var(--muted); font-size: 10px; }
+.rating-button { min-height: 32px; padding: 5px 9px; border: 1px solid #cdd8c7; border-radius: 5px; background: transparent; color: var(--ink); font-size: 10px; }
+.rating-button:hover:not(:disabled) { border-color: var(--accent); background: #edf3e9; }
+.rating-button[aria-pressed="true"] { color: white; border-color: var(--accent); background: var(--accent); }
+.rating-button:disabled { opacity: .55; }
+.rating-status, .rating-error { flex-basis: 100%; margin: 0; font-size: 10px; }
+.rating-status { color: var(--muted); }
+.rating-error { color: #9b4635; }
 .composer { display: flex; align-items: flex-end; gap: 12px; padding: 12px; border: 1px solid #cdd8c7; border-radius: 9px; background: #fff; box-shadow: 0 3px 12px #213c2510; }
 .composer:focus-within { border-color: #6e917d; box-shadow: 0 0 0 2px #246b6010; }
 .composer textarea { flex: 1; min-width: 0; min-height: 48px; max-height: 160px; resize: vertical; padding: 2px 3px; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 12px; line-height: 1.8; }

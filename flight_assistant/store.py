@@ -31,6 +31,7 @@ class Store:
                     id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
                     created_at TEXT NOT NULL,
+                    rating TEXT CHECK(rating IN ('up', 'down')),
                     lease_token TEXT,
                     lease_until REAL NOT NULL DEFAULT 0
                 );
@@ -56,6 +57,11 @@ class Store:
                 CREATE INDEX IF NOT EXISTS tool_events_message ON tool_events(message_id, id);
                 CREATE INDEX IF NOT EXISTS conversations_created ON conversations(created_at DESC);
             """)
+            # Add ratings to existing databases without replacing chat history.
+            connection.execute("BEGIN IMMEDIATE")
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(conversations)")}
+            if "rating" not in columns:
+                connection.execute("ALTER TABLE conversations ADD COLUMN rating TEXT CHECK(rating IN ('up', 'down'))")
 
     @contextmanager
     def connection(self):
@@ -69,14 +75,14 @@ class Store:
             connection.close()
 
     def create_conversation(self) -> dict:
-        conversation = {"id": str(uuid4()), "title": "New conversation", "created_at": timestamp()}
+        conversation = {"id": str(uuid4()), "title": "New conversation", "created_at": timestamp(), "rating": None}
         with self.connection() as connection:
-            connection.execute("INSERT INTO conversations(id, title, created_at) VALUES (?, ?, ?)", tuple(conversation.values()))
+            connection.execute("INSERT INTO conversations(id, title, created_at) VALUES (:id, :title, :created_at)", conversation)
         return {**conversation, "messages": []}
 
     def list_conversations(self) -> list[dict]:
         with self.connection() as connection:
-            return [dict(row) for row in connection.execute("SELECT id, title, created_at FROM conversations ORDER BY created_at DESC, rowid DESC")]
+            return [dict(row) for row in connection.execute("SELECT id, title, created_at, rating FROM conversations ORDER BY created_at DESC, rowid DESC")]
 
     @staticmethod
     def _message(connection, row) -> dict:
@@ -89,11 +95,20 @@ class Store:
 
     def get_conversation(self, conversation_id: str) -> dict:
         with self.connection() as connection:
-            row = connection.execute("SELECT id, title, created_at FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+            row = connection.execute("SELECT id, title, created_at, rating FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
             if row is None:
                 raise ConversationNotFound
             messages = connection.execute("SELECT * FROM messages WHERE conversation_id = ? ORDER BY id", (conversation_id,)).fetchall()
             return {**dict(row), "messages": [self._message(connection, message) for message in messages]}
+
+    def set_rating(self, conversation_id: str, rating: str | None) -> dict:
+        if rating is not None and rating not in ("up", "down"):
+            raise ValueError("Rating must be 'up', 'down', or None.")
+        with self.connection() as connection:
+            cursor = connection.execute("UPDATE conversations SET rating = ? WHERE id = ?", (rating, conversation_id))
+            if cursor.rowcount == 0:
+                raise ConversationNotFound
+        return {"id": conversation_id, "rating": rating}
 
     def begin_turn(self, conversation_id: str, content: str) -> tuple[str, dict]:
         token = str(uuid4())
