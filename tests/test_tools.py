@@ -50,6 +50,7 @@ def test_details_supply_baggage_and_are_not_mutable_catalogue_aliases():
     {"origin": "ABC"}, {"origin": ["JFK"]}, {"destination": "JFK"},
     {"date": "2026-02-30"}, {"date": "20261116"}, {"date": None},
     {"max_price": True}, {"max_price": -1}, {"max_price": "600"},
+    {"max_price": 10**400},
     {"nonstop": 1}, {"extra": "ignored?"},
 ])
 def test_search_independently_rejects_invalid_arguments(search_args, changes):

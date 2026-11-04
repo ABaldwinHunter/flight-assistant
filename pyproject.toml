@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
+dev = ["pytest>=8,<10", "httpx2>=2,<3"]
 
 [project.scripts]
 flight-assistant = "flight_assistant.cli:main"

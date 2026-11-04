@@ -38,6 +38,10 @@ Enable **tool trace** to inspect model-requested tool names, arguments, returned
 
 The model either asks a clarifying question, answers from existing evidence, or requests an allowlisted function. Python validates the arguments, searches deterministic fixtures or retrieves flight details, then sends structured results back to the model. The explicit loop is bounded; empty results and tool failures are distinct. SQLite retains tool evidence so follow-ups do not depend on the server process staying alive.
 
+Read the code in this order: `tools.py` (schemas and fixtures), `service.py` (OpenAI Responses API loop), `store.py` (SQLite and replayable turns), then `app.py` / `static/app.js` (HTTP and UI). The CLI is `cli.py`.
+
+Per turn: at most **5 model requests**, **8 tool executions**, and **1,800 output tokens per request**, with a **20-second timeout per request** and no SDK retries. Provider context keeps at most **12 whole turns** within **48,000 serialized characters**, including balanced tool evidence from failed turns; older chat remains visible in SQLite but is not necessarily sent to the model. Missing context requires clarification, not guessing. Input is capped at 4,000 characters.
+
 Settings in `.env`:
 
 | Variable | Default | Purpose |

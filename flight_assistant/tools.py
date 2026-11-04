@@ -123,8 +123,13 @@ def _validate(name: str, arguments: object) -> dict:
         except ValueError:
             raise ToolInputError("date must be a valid YYYY-MM-DD calendar date.") from None
         price = arguments["max_price"]
-        if price is not None and (type(price) not in (int, float) or not math.isfinite(price) or price < 0):
-            raise ToolInputError("max_price must be a finite non-negative USD number or null.")
+        if price is not None:
+            try:
+                valid_price = type(price) in (int, float) and math.isfinite(price) and price >= 0
+            except OverflowError:
+                valid_price = False
+            if not valid_price:
+                raise ToolInputError("max_price must be a finite non-negative USD number or null.")
         if arguments["nonstop"] is not None and type(arguments["nonstop"]) is not bool:
             raise ToolInputError("nonstop must be a boolean or null.")
     elif name == "get_flight_details":

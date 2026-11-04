@@ -64,24 +64,27 @@ class ChatService:
         content = content.strip()
         token, user_message = self.store.begin_turn(conversation_id, content)
         events: list[dict] = []
+        provider_turn = [{"role": "user", "content": content}]
         try:
             try:
-                reply, provider_turn = self._run_turn(conversation_id, content, events)
+                reply, provider_turn = self._run_turn(conversation_id, content, events, provider_turn)
                 status = "complete"
             except TurnFailure as error:
-                reply, provider_turn, status = str(error), [], "error"
+                reply, status = str(error), "error"
             except Exception as error:
                 # Never expose upstream exception text, request bodies, headers or credentials.
-                reply, provider_turn, status = self._safe_provider_error(error), [], "error"
+                reply, status = self._safe_provider_error(error), "error"
+            if status == "error":
+                # Only executed calls enter this list, each immediately paired with its output.
+                provider_turn.append({"role": "assistant", "content": reply})
             assistant = self.store.finish_turn(conversation_id, token, reply, status, events, provider_turn)
             return {"user_message": user_message, "assistant_message": assistant}
         finally:
             self.store.release_turn(conversation_id, token)
 
-    def _run_turn(self, conversation_id: str, content: str, events: list[dict]) -> tuple[str, list[dict]]:
+    def _run_turn(self, conversation_id: str, content: str, events: list[dict], current: list[dict]) -> tuple[str, list[dict]]:
         client = self._client()
         instructions = SYSTEM_PROMPT + "\nToday's UTC calendar date: " + datetime.now(timezone.utc).date().isoformat()
-        current = [{"role": "user", "content": content}]
         fixed_size = len(instructions) + len(json.dumps(TOOL_SCHEMAS))
         history_budget = MAX_CONTEXT_CHARS - fixed_size - len(json.dumps(current))
         history = self.store.provider_history(conversation_id, max_turns=MAX_HISTORY_TURNS, max_chars=max(0, history_budget))

@@ -117,7 +117,7 @@ class Store:
     def provider_history(self, conversation_id: str, *, max_turns: int, max_chars: int) -> list[dict]:
         """Keep only whole completed turns, so function calls always have matching outputs."""
         with self.connection() as connection:
-            rows = connection.execute("SELECT provider_turn FROM messages WHERE conversation_id = ? AND role = 'assistant' AND status = 'complete' ORDER BY id DESC LIMIT ?", (conversation_id, max_turns)).fetchall()
+            rows = connection.execute("SELECT provider_turn FROM messages WHERE conversation_id = ? AND role = 'assistant' ORDER BY id DESC LIMIT ?", (conversation_id, max_turns)).fetchall()
         selected = []
         size = 0
         for row in rows:
