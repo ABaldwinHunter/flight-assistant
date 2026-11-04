@@ -2,6 +2,20 @@
 
 A small interview demo of **real LLM tool calling over clearly simulated flight data**. FastAPI serves a lightweight browser UI; SQLite keeps conversations, messages, and tool-call arguments/results/errors. An optional terminal client uses the same backend logic. Search and comparison only: no booking, payment, RAG, or frontend build pipeline.
 
+## Screenshots
+
+**1. Flight comparison** — multiple simulated options ordered by total trip duration.
+
+![Flight comparison showing three simulated flights ordered by duration](docs/images/flight-comparison.png)
+
+**2. Tool trace** — inspect the requested function, arguments, and structured simulated results.
+
+![Expanded search_flights tool call with JSON arguments and results](docs/images/tool-trace.png)
+
+**3. Conversational follow-ups and feedback** — simulated-data disclosure and conversation-level ratings.
+
+![Follow-up conversation with simulated-data explanation and helpful/not-helpful rating controls](docs/images/conversational-followups.png)
+
 ## Run
 
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/), plus an OpenAI API key with access to the configured model. LLM calls incur your account's API charges.

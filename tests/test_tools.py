@@ -86,7 +86,7 @@ def test_allowlist_and_explicit_failure_mode(search_args):
     assert "flights" not in failed
 
 
-@pytest.mark.parametrize("origin,destination", permutations(AIRPORT_CODES, 2))
+@pytest.mark.parametrize("origin,destination", tuple(permutations(AIRPORT_CODES, 2)))
 @pytest.mark.parametrize("departure_date", ["2027-01-15", "2027-07-15", "2028-02-29"])
 def test_all_supported_routes_and_dates_have_consistent_flights(origin, destination, departure_date):
     query = {"origin": origin, "destination": destination, "date": departure_date, "max_price": None, "nonstop": None}
