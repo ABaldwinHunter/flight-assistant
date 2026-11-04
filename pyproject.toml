@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flight-assistant"
+version = "0.1.0"
+description = "A small, persisted flight assistant demonstrating real LLM tool calling over simulated flights."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "openai>=2,<3",
+  "python-dotenv>=1,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
+
+[project.scripts]
+flight-assistant = "flight_assistant.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["flight_assistant"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

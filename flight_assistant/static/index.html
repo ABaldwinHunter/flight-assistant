@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#132d31">
+  <title>Flight desk — a simulated flight assistant</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#message-input">Skip to message</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Conversation navigation">
+      <a class="brand" href="/" aria-label="Flight desk home">
+        <span class="brand-symbol" aria-hidden="true">↗</span>
+        <span>flight desk<span class="brand-subtitle">A SMALL, EXPLAINABLE DEMO</span></span>
+      </a>
+      <button class="new-chat" id="new-chat" type="button"><span aria-hidden="true">+</span> New conversation</button>
+      <div class="history-heading"><h2>Conversations</h2><span id="conversation-count">0</span></div>
+      <p class="history-status" id="history-status">Loading conversations…</p>
+      <nav class="conversation-list" id="conversation-list" aria-label="Saved conversations"></nav>
+      <div class="sidebar-footer">
+        <span class="local-indicator" aria-hidden="true"></span><strong>Local demo, not a booking service</strong>
+        <p>No sign-in. Chats are saved on this server’s disk. Your messages are sent to OpenAI.</p>
+      </div>
+    </aside>
+
+    <main class="main-panel" id="main-content">
+      <header class="topbar">
+        <div><p class="eyebrow">YOUR FLIGHT DESK</p><h1 id="conversation-title">Flight assistant</h1></div>
+        <div class="simulation-badge"><span aria-hidden="true"></span> Simulated flights</div>
+      </header>
+
+      <section class="fixture-strip" aria-label="Available simulated flight data">
+        <div><span class="fixture-label">DEMO DEPARTURE DATE</span><strong id="demo-date">16 Nov 2026</strong></div>
+        <div class="fixture-routes"><span class="fixture-label">AVAILABLE ROUTES</span><span id="demo-routes">JFK → LHR <span aria-hidden="true">·</span> JFK → CDG <span aria-hidden="true">·</span> SFO → JFK</span></div>
+        <span class="fixture-note">Fictional schedules. Real tool calls.</span>
+      </section>
+
+      <div class="notice config-notice" id="config-notice" role="status" hidden></div>
+      <div class="notice failure-notice" id="failure-notice" role="status" hidden><strong>Tool-failure demonstration is on.</strong> Simulated flight tools will return errors so you can inspect how the assistant handles them.</div>
+      <div class="notice error-notice global-error" id="global-error" role="alert" hidden></div>
+
+      <div class="chat-scroll" id="chat-scroll" tabindex="0" aria-label="Conversation messages">
+        <section class="welcome" id="welcome" aria-labelledby="welcome-title">
+          <div class="welcome-kicker"><span aria-hidden="true">↗</span> A LITTLE LESS GUESSWORK</div>
+          <h2 id="welcome-title">Find a flight.<br><span>See how it works.</span></h2>
+          <p class="welcome-copy">Compare fictional flights with a real AI assistant. Ask a question, follow up, and peek at the tools behind the answer.</p>
+          <div class="example-grid" aria-label="Example questions">
+            <button class="example-card" type="button" data-example="Find nonstop flights from JFK to LHR on 2026-11-16 under $700."><span class="example-route">NEW YORK <span aria-hidden="true">→</span> LONDON</span><strong>Across the Atlantic, nonstop</strong><span>JFK to LHR · 16 Nov · under $700</span><span class="example-arrow" aria-hidden="true">↗</span></button>
+            <button class="example-card" type="button" data-example="Compare flights from JFK to CDG on 2026-11-16. Which is the cheapest?"><span class="example-route">NEW YORK <span aria-hidden="true">→</span> PARIS</span><strong>A better fare to Paris</strong><span>JFK to CDG · 16 Nov · lowest price</span><span class="example-arrow" aria-hidden="true">↗</span></button>
+            <button class="example-card" type="button" data-example="What flights are available from SFO to JFK on 2026-11-16?"><span class="example-route">SAN FRANCISCO <span aria-hidden="true">→</span> NEW YORK</span><strong>From coast to coast</strong><span>SFO to JFK · 16 Nov · all options</span><span class="example-arrow" aria-hidden="true">↗</span></button>
+          </div>
+          <p class="welcome-footnote">Start with a route and a date. The assistant will ask if it needs more details.</p>
+        </section>
+        <div class="messages" id="messages" role="log" aria-label="Chat history" aria-live="off" hidden></div>
+      </div>
+
+      <section class="composer-area" aria-label="Write a message">
+        <div class="composer-toolbar"><label class="trace-toggle"><input id="trace-toggle" type="checkbox"><span>Show tool activity</span></label><span class="model-label" id="model-label">Connecting to server…</span></div>
+        <p class="send-error" id="send-error" role="alert" hidden></p>
+        <form class="composer" id="message-form">
+          <label class="sr-only" for="message-input">Your message</label>
+          <textarea id="message-input" rows="2" maxlength="4000" placeholder="Where would you like to go?" aria-describedby="composer-help input-count"></textarea>
+          <button class="send-button" id="send-button" type="submit" aria-label="Send message"><span id="send-label">Send</span><span aria-hidden="true">↑</span></button>
+        </form>
+        <div class="composer-meta"><p id="composer-help">Enter to send <span aria-hidden="true">·</span> Shift + Enter for a new line</p><span id="input-count">0 / 4,000</span></div>
+        <p class="data-disclaimer">Simulated flight data only. No live availability, reservations, or purchases.</p>
+      </section>
+      <p class="sr-only" id="live-status" role="status" aria-live="polite" aria-atomic="true"></p>
+    </main>
+  </div>
+</body>
+</html>
