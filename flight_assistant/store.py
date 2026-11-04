@@ -104,8 +104,8 @@ class Store:
                 raise ConversationNotFound
             if row["lease_until"] > time.time():
                 raise ConversationBusy
-            # Longer than the bounded five 20-second provider calls; survives multiworker access.
-            connection.execute("UPDATE conversations SET lease_token = ?, lease_until = ? WHERE id = ?", (token, time.time() + 180, conversation_id))
+            # Allow five model requests with two SDK retries, including Retry-After waits.
+            connection.execute("UPDATE conversations SET lease_token = ?, lease_until = ? WHERE id = ?", (token, time.time() + 1200, conversation_id))
             existing = connection.execute("SELECT 1 FROM messages WHERE conversation_id = ? LIMIT 1", (conversation_id,)).fetchone()
             if existing is None:
                 title = " ".join(content.split())[:64]

@@ -1,73 +1,79 @@
 """An allowlisted, deterministic fictional flight catalogue. No booking or live data."""
-from copy import deepcopy
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
+from hashlib import sha256
 import json
 import math
+from zoneinfo import ZoneInfo
 
 DEMO_DATE = "2026-11-16"
 DEMO_ROUTES = ["JFK → LHR", "JFK → CDG", "SFO → JFK"]
-AIRPORTS = {"JFK", "LHR", "CDG", "SFO"}
+# Time zone and coordinates are used only to make fictional schedules plausible.
+AIRPORTS = {
+    "JFK": ("America/New_York", 40.64, -73.78),
+    "LHR": ("Europe/London", 51.47, -0.45),
+    "CDG": ("Europe/Paris", 49.01, 2.55),
+    "SFO": ("America/Los_Angeles", 37.62, -122.38),
+    "ATL": ("America/New_York", 33.64, -84.43),
+    "LAX": ("America/Los_Angeles", 33.94, -118.41),
+    "ORD": ("America/Chicago", 41.98, -87.90),
+    "BOS": ("America/New_York", 42.37, -71.01),
+    "MIA": ("America/New_York", 25.80, -80.29),
+}
 
-# The IDs are permanent fixture identifiers, not real flight numbers.
-FLIGHTS = (
-    {
-        "flight_id": "SIM-ATL-101", "airline": "Atlantic Lantern (fictional)",
-        "origin": "JFK", "destination": "LHR", "date": DEMO_DATE,
-        "departure": "2026-11-16T19:00:00-05:00", "arrival": "2026-11-17T07:00:00+00:00",
-        "duration_minutes": 420, "stops": 0, "price": 545, "currency": "USD",
-        "fare": "Economy Light", "baggage": {"personal_item": "1 included", "carry_on": "1 bag up to 8 kg included", "checked": "Not included; first bag USD 60 each way"},
-        "fare_rules": {"changes": "USD 100 plus fare difference", "refunds": "Non-refundable"},
-    },
-    {
-        "flight_id": "SIM-ATL-102", "airline": "Atlantic Lantern (fictional)",
-        "origin": "JFK", "destination": "LHR", "date": DEMO_DATE,
-        "departure": "2026-11-16T21:30:00-05:00", "arrival": "2026-11-17T09:40:00+00:00",
-        "duration_minutes": 430, "stops": 0, "price": 675, "currency": "USD",
-        "fare": "Economy Standard", "baggage": {"personal_item": "1 included", "carry_on": "1 bag up to 10 kg included", "checked": "1 bag up to 23 kg included"},
-        "fare_rules": {"changes": "No change fee; fare difference applies", "refunds": "Non-refundable"},
-    },
-    {
-        "flight_id": "SIM-BRG-201", "airline": "Bluebridge Air (fictional)",
-        "origin": "JFK", "destination": "LHR", "date": DEMO_DATE,
-        "departure": "2026-11-16T16:00:00-05:00", "arrival": "2026-11-17T08:45:00+00:00",
-        "duration_minutes": 705, "stops": 1, "connection": "CDG",
-        "price": 430, "currency": "USD", "fare": "Economy Saver",
-        "baggage": {"personal_item": "1 included", "carry_on": "1 bag up to 8 kg included", "checked": "Not included; first bag USD 70 each way"},
-        "fare_rules": {"changes": "Not permitted", "refunds": "Non-refundable"},
-    },
-    {
-        "flight_id": "SIM-BRG-202", "airline": "Bluebridge Air (fictional)",
-        "origin": "JFK", "destination": "CDG", "date": DEMO_DATE,
-        "departure": "2026-11-16T18:30:00-05:00", "arrival": "2026-11-17T08:00:00+01:00",
-        "duration_minutes": 450, "stops": 0, "price": 510, "currency": "USD",
-        "fare": "Economy Standard", "baggage": {"personal_item": "1 included", "carry_on": "1 bag up to 8 kg included", "checked": "1 bag up to 23 kg included"},
-        "fare_rules": {"changes": "USD 75 plus fare difference", "refunds": "Non-refundable"},
-    },
-    {
-        "flight_id": "SIM-COA-301", "airline": "Coastal Skylines (fictional)",
-        "origin": "SFO", "destination": "JFK", "date": DEMO_DATE,
-        "departure": "2026-11-16T08:00:00-08:00", "arrival": "2026-11-16T16:30:00-05:00",
-        "duration_minutes": 330, "stops": 0, "price": 245, "currency": "USD",
-        "fare": "Economy Basic", "baggage": {"personal_item": "1 included", "carry_on": "1 bag up to 10 kg included", "checked": "Not included; first bag USD 35 each way"},
-        "fare_rules": {"changes": "Not permitted", "refunds": "Non-refundable"},
-    },
-    {
-        "flight_id": "SIM-COA-302", "airline": "Coastal Skylines (fictional)",
-        "origin": "SFO", "destination": "JFK", "date": DEMO_DATE,
-        "departure": "2026-11-16T22:00:00-08:00", "arrival": "2026-11-17T06:20:00-05:00",
-        "duration_minutes": 320, "stops": 0, "price": 315, "currency": "USD",
-        "fare": "Economy Standard", "baggage": {"personal_item": "1 included", "carry_on": "1 bag up to 10 kg included", "checked": "1 bag up to 23 kg included"},
-        "fare_rules": {"changes": "No change fee; fare difference applies", "refunds": "Non-refundable"},
-    },
-    {
-        "flight_id": "SIM-ATL-103", "airline": "Atlantic Lantern (fictional)",
-        "origin": "JFK", "destination": "LHR", "date": "2026-11-17",
-        "departure": "2026-11-17T19:00:00-05:00", "arrival": "2026-11-18T07:00:00+00:00",
-        "duration_minutes": 420, "stops": 0, "price": 565, "currency": "USD",
-        "fare": "Economy Light", "baggage": {"personal_item": "1 included", "carry_on": "1 bag up to 8 kg included", "checked": "Not included; first bag USD 60 each way"},
-        "fare_rules": {"changes": "USD 100 plus fare difference", "refunds": "Non-refundable"},
-    },
-)
+
+def _generate_flights(origin: str, destination: str, departure_date: str) -> list[dict]:
+    """Three fictional options per route/date; SHA-256 is stable across processes."""
+    seed = sha256(f"{origin}|{destination}|{departure_date}".encode()).digest()
+    origin_zone, lat1, lon1 = AIRPORTS[origin]
+    destination_zone, lat2, lon2 = AIRPORTS[destination]
+    lat1, lon1, lat2, lon2 = map(math.radians, (lat1, lon1, lat2, lon2))
+    haversine = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
+    distance_km = 12742 * math.asin(math.sqrt(min(1.0, haversine)))
+    base_duration = 45 + math.ceil(distance_km / 800 * 12) * 5
+    base_price = 80 + int(distance_km / 25) + seed[0] % 100
+    day = date.fromisoformat(departure_date)
+    connections = sorted(set(AIRPORTS) - {origin, destination})
+    flights = []
+    for index, (hour, price_extra, airline, fare) in enumerate((
+        (8, 50, "Atlantic Lantern (fictional)", "Economy Light"),
+        (15, 150, "Coastal Skylines (fictional)", "Economy Standard"),
+        (6, 0, "Bluebridge Air (fictional)", "Economy Saver"),
+    )):
+        departure = datetime(day.year, day.month, day.day, hour + seed[index + 1] % 3, seed[index + 4] % 4 * 15, tzinfo=ZoneInfo(origin_zone))
+        stops = int(index == 2)
+        duration = base_duration + index * 10 + stops * 150
+        arrival = (departure.astimezone(timezone.utc) + timedelta(minutes=duration)).astimezone(ZoneInfo(destination_zone))
+        flight = {
+            "flight_id": f"SIM-{origin}-{destination}-{departure_date.replace('-', '')}-{index + 1}",
+            "airline": airline, "origin": origin, "destination": destination,
+            "date": departure_date, "departure": departure.isoformat(), "arrival": arrival.isoformat(),
+            "duration_minutes": duration, "stops": stops,
+            "price": base_price + price_extra, "currency": "USD", "fare": fare,
+            "baggage": {
+                "personal_item": "1 included",
+                "carry_on": "1 bag up to 8 kg included",
+                "checked": "1 bag up to 23 kg included" if index == 1 else "Not included; first bag USD 60 each way",
+            },
+            "fare_rules": {
+                "changes": "No change fee; fare difference applies" if index == 1 else "USD 100 plus fare difference",
+                "refunds": "Non-refundable",
+            },
+        }
+        if stops:
+            flight["connection"] = connections[seed[7] % len(connections)]
+        flights.append(flight)
+    return flights
+
+
+def _find_flight(flight_id: str) -> dict | None:
+    try:
+        prefix, origin, destination, day, _number = flight_id.split("-")
+        if prefix != "SIM" or origin not in AIRPORTS or destination not in AIRPORTS or origin == destination:
+            return None
+        departure_date = date.fromisoformat(day).isoformat()
+    except ValueError:
+        return None
+    return next((flight for flight in _generate_flights(origin, destination, departure_date) if flight["flight_id"] == flight_id), None)
 
 TOOL_SCHEMAS = [
     {
@@ -88,7 +94,7 @@ TOOL_SCHEMAS = [
     },
     {
         "type": "function", "name": "get_flight_details",
-        "description": "Retrieve a simulated flight by stable fixture ID, including baggage and fare rules.",
+        "description": "Retrieve a simulated flight by the stable ID returned by search_flights, including baggage and fare rules.",
         "strict": True,
         "parameters": {
             "type": "object", "additionalProperties": False,
@@ -111,7 +117,7 @@ def _validate(name: str, arguments: object) -> dict:
             raise ToolInputError("Provide origin, destination, date, max_price and nonstop only; use null for optional filters.")
         for field in ("origin", "destination"):
             if not isinstance(arguments[field], str) or arguments[field] not in AIRPORTS:
-                raise ToolInputError(f"{field} must be JFK, LHR, CDG or SFO.")
+                raise ToolInputError(f"{field} must be one of: {', '.join(sorted(AIRPORTS))}.")
         if arguments["origin"] == arguments["destination"]:
             raise ToolInputError("Origin and destination must differ.")
         value = arguments["date"]
@@ -158,11 +164,11 @@ def execute_tool(name: str, raw_arguments: str, *, simulate_failure: bool = Fals
     if simulate_failure:
         return arguments, {"data_source": "simulated", "error": {"code": "simulated_failure", "message": "Simulated flight tools are intentionally unavailable (FLIGHT_SIMULATE_FAILURE=1). No flight data was retrieved."}}, "error"
     if name == "search_flights":
-        matches = [flight for flight in FLIGHTS if flight["origin"] == args["origin"] and flight["destination"] == args["destination"] and flight["date"] == args["date"] and (args["max_price"] is None or flight["price"] <= args["max_price"]) and (args["nonstop"] is not True or flight["stops"] == 0)]
+        matches = [flight for flight in _generate_flights(args["origin"], args["destination"], args["date"]) if (args["max_price"] is None or flight["price"] <= args["max_price"]) and (args["nonstop"] is not True or flight["stops"] == 0)]
         matches.sort(key=lambda flight: (flight["price"], flight["departure"], flight["flight_id"]))
         summaries = [{key: value for key, value in flight.items() if key not in {"baggage", "fare_rules"}} for flight in matches]
-        return arguments, {"data_source": "simulated", "currency": "USD", "price_basis": "One adult, one way, simulated taxes included", "query": args, "flights": deepcopy(summaries), "count": len(summaries)}, "ok"
-    flight = next((flight for flight in FLIGHTS if flight["flight_id"] == args["flight_id"]), None)
+        return arguments, {"data_source": "simulated", "currency": "USD", "price_basis": "One adult, one way, simulated taxes included", "query": args, "flights": summaries, "count": len(summaries)}, "ok"
+    flight = _find_flight(args["flight_id"])
     if flight is None:
         return arguments, {"data_source": "simulated", "error": {"code": "flight_not_found", "message": "No simulated flight has that ID. Use an ID returned by search_flights."}}, "error"
-    return arguments, {"data_source": "simulated", "flight": deepcopy(flight)}, "ok"
+    return arguments, {"data_source": "simulated", "flight": flight}, "ok"

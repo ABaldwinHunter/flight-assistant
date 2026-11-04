@@ -26,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--list", action="store_true", help="List saved conversation IDs and exit.")
     args = parser.parse_args(argv)
     print("SIMULATED FLIGHT DATA — fictional flights, USD prices, no booking or live availability.")
-    print("Demo: 2026-11-16 · JFK → LHR / JFK → CDG / SFO → JFK")
+    print("Any departure date · Airports: JFK, LHR, CDG, SFO, ATL, LAX, ORD, BOS, MIA")
     try:
         service = ChatService(Settings.from_env())
         if args.list:
