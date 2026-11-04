@@ -142,7 +142,9 @@ def execute_tool(name: str, raw_arguments: str, *, simulate_failure: bool = Fals
         if not isinstance(raw_arguments, str) or len(raw_arguments) > 8000:
             raise ToolInputError("Tool arguments must be a JSON string of at most 8000 characters.")
         try:
-            arguments = json.loads(raw_arguments, parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+            decoded = json.loads(raw_arguments, parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+            json.dumps(decoded, allow_nan=False)
+            arguments = decoded
         except (ValueError, RecursionError):
             raise ToolInputError("Arguments must contain valid finite JSON.") from None
         args = _validate(name, arguments)
