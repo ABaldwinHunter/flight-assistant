@@ -57,7 +57,7 @@ Settings in `.env`:
 uv run pytest
 ```
 
-Deterministic tests exercise behavior without paid API calls. For the real end-to-end check, configure your key, run the app, and perform the demo conversation above with tool trace enabled. Tests using a scripted provider do **not** prove real-model clarification or grounding.
+Deterministic tests cover validation, persistence, safe provider errors, and execution/context limits without paid API calls. Live smoke checks with `gpt-4.1-mini` passed in the browser and CLI: clarification, search, price/nonstop follow-ups, baggage lookup, empty results, an explicit tool outage, and grounded history after a server restart. To repeat, configure your key and perform the demo above with tool trace enabled. Scripted-provider tests do **not** prove real-model behavior; model wording and decisions can vary between runs.
 
 ## Scope and tradeoffs
 

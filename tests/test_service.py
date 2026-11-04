@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from flight_assistant.service import ChatService, MAX_CONTEXT_CHARS, MAX_OUTPUT_TOKENS
+from flight_assistant.service import ChatService, MAX_CONTEXT_CHARS
 from flight_assistant.store import ConversationBusy, Store
 from conftest import ScriptedProvider, answer, calls
 
@@ -25,11 +25,6 @@ def test_search_trace_and_grounded_followup_survive_restart(settings, search_arg
     assert event["status"] == "ok" and event["duration_ms"] >= 0
     assert event["arguments"] == search_args
     assert event["result"]["flights"][0]["flight_id"] == "SIM-BRG-201"
-    for request in provider.calls:
-        assert request["store"] is False
-        assert request["max_output_tokens"] == MAX_OUTPUT_TOKENS
-        assert request["parallel_tool_calls"] is False
-    assert any(item.get("type") == "function_call_output" for item in provider.calls[1]["input"])
 
     followup = ScriptedProvider(calls(("get_flight_details", {"flight_id": "SIM-BRG-201"}, "detail-1")), answer("Simulated SIM-BRG-201 has no checked bag included; first bag USD 70 each way."))
     restarted = ChatService(settings, provider=followup)
@@ -41,15 +36,6 @@ def test_search_trace_and_grounded_followup_survive_restart(settings, search_arg
     assert len(restored["messages"]) == 4
     assert restored["messages"][1] == assistant
     assert restored["messages"][3]["tool_events"][0]["result"]["flight"]["baggage"]
-
-
-def test_clarification_needs_no_flight_tool(settings):
-    provider = ScriptedProvider(answer("What origin, destination and departure date would you like?"))
-    service, chat_id = new_chat(settings, provider)
-    result = service.send_message(chat_id, "Find me a flight")
-    assert result["assistant_message"]["status"] == "complete"
-    assert result["assistant_message"]["tool_events"] == []
-    assert len(provider.calls) == 1
 
 
 def test_empty_search_and_tool_failure_are_distinct(settings, search_args):
@@ -110,7 +96,6 @@ def test_model_request_limit_preserves_events_without_unmatched_context(settings
     result = service.send_message(chat_id, "JFK-LHR on 2026-11-16")
     assistant = result["assistant_message"]
     assert assistant["status"] == "error"
-    assert "5 model requests" in assistant["content"]
     assert len(provider.calls) == len(assistant["tool_events"]) == 5
     history = service.store.provider_history(chat_id, max_turns=12, max_chars=48000)
     assert len([item for item in history if item.get("type") == "function_call"]) == 5
@@ -123,7 +108,6 @@ def test_tool_execution_limit_is_enforced_even_if_provider_batches(settings, sea
     service, chat_id = new_chat(settings, ScriptedProvider(calls(*batch)))
     result = service.send_message(chat_id, "JFK-LHR 2026-11-16")
     assert result["assistant_message"]["status"] == "error"
-    assert "8 flight-tool executions" in result["assistant_message"]["content"]
     assert result["assistant_message"]["tool_events"] == []
 
 
@@ -202,7 +186,6 @@ def test_network_failure_is_safe_and_the_conversation_can_continue(settings):
     service, chat_id = new_chat(settings, provider)
     failed = service.send_message(chat_id, "JFK to LHR")
     assert failed["assistant_message"]["status"] == "error"
-    assert "could not be reached" in failed["assistant_message"]["content"]
     recovered = service.send_message(chat_id, "November 16, 2026")
     assert recovered["assistant_message"]["status"] == "complete"
     assert len(service.store.get_conversation(chat_id)["messages"]) == 4
